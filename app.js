@@ -6,11 +6,12 @@ const path = require('path');
 
 const app = express();
 const port = 3000;
+const db_host = 'db-server.techflowapp.com';
 
 // Configuração da conexão com o banco de dados
 const pool = new Pool({
   user: 'postgres',
-  host: '10.103.21.249',
+  host: db_host,
   database: 'techflow_db',
   password: 'abc123',
   port: 5432,
@@ -134,5 +135,5 @@ app.delete('/api/products/:id', async (req, res) => {
 // Inicia o servidor
 app.listen(port, () => {
   console.log(`Servidor TechFlow rodando na porta ${port}`);
-  console.log(`Conectando ao banco de dados em 10.103.21.249`);
+  console.log(`Conectando ao banco de dados em ${db_host}`);
 });
