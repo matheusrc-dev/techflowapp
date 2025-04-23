@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechFlow Solutions - Gerenciamento de Produtos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+        }
+        .form-section, .list-section {
+            flex: 1;
+            min-width: 300px;
+        }
+        .form-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        button {
+            cursor: pointer;
+            padding: 8px 15px;
+            margin-right: 5px;
+            border: none;
+            border-radius: 4px;
+            background-color: #3498db;
+            color: white;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button#cancelBtn {
+            background-color: #95a5a6;
+        }
+        button#cancelBtn:hover {
+            background-color: #7f8c8d;
+        }
+        button.delete-btn {
+            background-color: #e74c3c;
+        }
+        button.delete-btn:hover {
+            background-color: #c0392b;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0 15px;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        label {
+            font-weight: bold;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>TechFlow Solutions - Gerenciamento de Produtos</h1>
+    
+    <div class="container">
+        <div class="form-section">
+            <h2>Adicionar/Editar Produto</h2>
+            <form id="productForm">
+                <input type="hidden" id="productId">
+                
+                <label for="name">Nome do Produto:</label>
+                <input type="text" id="name" name="name" required>
+                
+                <label for="description">Descrição:</label>
+                <textarea id="description" name="description" rows="3"></textarea>
+                
+                <label for="price">Preço (R$):</label>
+                <input type="number" id="price" name="price" step="0.01" required>
+                
+                <label for="quantity">Quantidade:</label>
+                <input type="number" id="quantity" name="quantity" value="0">
+                
+                <button type="submit" id="submitBtn">Adicionar Produto</button>
+                <button type="button" id="cancelBtn" style="display:none;">Cancelar</button>
+            </form>
+            <div id="status"></div>
+        </div>
+        
+        <div class="list-section">
+            <h2>Lista de Produtos</h2>
+            <div id="loading">Carregando produtos...</div>
+            <table id="productTable" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Preço</th>
+                        <th>Qtd</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="productList"></tbody>
+            </table>
+            <div id="noProducts" style="display:none;">Nenhum produto cadastrado.</div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api/products';
+        let editMode = false;
+        const statusDiv = document.getElementById('status');
+        
+        // Função para exibir mensagem de status
+        function showStatus(message, isError = false) {
+            statusDiv.textContent = message;
+            statusDiv.className = isError ? 'status error' : 'status success';
+            setTimeout(() => {
+                statusDiv.textContent = '';
+                statusDiv.className = '';
+            }, 3000);
+        }
+        
+        // Carrega produtos quando a página carregar
+        document.addEventListener('DOMContentLoaded', loadProducts);
+        
+        // Manipulador de envio do formulário
+        document.getElementById('productForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const product = {
+                name: document.getElementById('name').value,
+                description: document.getElementById('description').value,
+                price: parseFloat(document.getElementById('price').value),
+                quantity: parseInt(document.getElementById('quantity').value)
+            };
+            
+            if (editMode) {
+                const id = document.getElementById('productId').value;
+                updateProduct(id, product);
+            } else {
+                createProduct(product);
+            }
+        });
+        
+        // Manipulador do botão cancelar
+        document.getElementById('cancelBtn').addEventListener('click', resetForm);
+        
+        // Carrega todos os produtos da API
+        function loadProducts() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('productTable').style.display = 'none';
+            document.getElementById('noProducts').style.display = 'none';
+            
+            fetch(API_URL)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(products => {
+                    const productList = document.getElementById('productList');
+                    productList.innerHTML = '';
+                    
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    if (products.length === 0) {
+                        document.getElementById('noProducts').style.display = 'block';
+                        return;
+                    }
+                    
+                    document.getElementById('productTable').style.display = 'table';
+                    
+                    products.forEach(product => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${product.name}</td>
+                            <td>R$ ${parseFloat(product.price).toFixed(2)}</td>
+                            <td>${product.quantity}</td>
+                            <td>
+                                <button onclick="editProduct(${product.id})">Editar</button>
+                                <button class="delete-btn" onclick="deleteProduct(${product.id})">Excluir</button>
+                            </td>
+                        `;
+                        productList.appendChild(row);
+                    });
+                })
+                .catch(error => {
+                    document.getElementById('loading').style.display = 'none';
+                    console.error('Erro ao carregar produtos:', error);
+                    showStatus(`Erro ao carregar produtos: ${error.message}`, true);
+                });
+        }
+        
+        // Cria um novo produto
+        function createProduct(product) {
+            fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(product)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.error || `Status: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                resetForm();
+                loadProducts();
+                showStatus('Produto adicionado com sucesso!');
+            })
+            .catch(error => {
+                console.error('Erro ao criar produto:', error);
+                showStatus(`Erro ao criar produto: ${error.message}`, true);
+            });
+        }
+        
+        // Edita produto - preenche o formulário
+        function editProduct(id) {
+            fetch(`${API_URL}/${id}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(product => {
+                    document.getElementById('productId').value = product.id;
+                    document.getElementById('name').value = product.name;
+                    document.getElementById('description').value = product.description || '';
+                    document.getElementById('price').value = product.price;
+                    document.getElementById('quantity').value = product.quantity;
+                    
+                    document.getElementById('submitBtn').textContent = 'Atualizar Produto';
+                    document.getElementById('cancelBtn').style.display = 'inline-block';
+                    editMode = true;
+                })
+                .catch(error => {
+                    console.error('Erro ao buscar produto:', error);
+                    showStatus(`Erro ao buscar produto: ${error.message}`, true);
+                });
+        }
+        
+        // Atualiza um produto existente
+        function updateProduct(id, product) {
+            fetch(`${API_URL}/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(product)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.error || `Status: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                resetForm();
+                loadProducts();
+                showStatus('Produto atualizado com sucesso!');
+            })
+            .catch(error => {
+                console.error('Erro ao atualizar produto:', error);
+                showStatus(`Erro ao atualizar produto: ${error.message}`, true);
+            });
+        }
+        
+        // Exclui um produto
+        function deleteProduct(id) {
+            if (confirm('Tem certeza que deseja excluir este produto?')) {
+                fetch(`${API_URL}/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || `Status: ${response.status}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadProducts();
+                    showStatus('Produto excluído com sucesso!');
+                })
+                .catch(error => {
+                    console.error('Erro ao excluir produto:', error);
+                    showStatus(`Erro ao excluir produto: ${error.message}`, true);
+                });
+            }
+        }
+        
+        // Reset do formulário para o estado inicial
+        function resetForm() {
+            document.getElementById('productForm').reset();
+            document.getElementById('productId').value = '';
+            document.getElementById('submitBtn').textContent = 'Adicionar Produto';
+            document.getElementById('cancelBtn').style.display = 'none';
+            editMode = false;
+        }
+    </script>
+</body>
+</html>

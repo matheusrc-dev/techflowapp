@@ -1,0 +1,138 @@
+const express = require('express');
+const { Pool } = require('pg');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const path = require('path');
+
+const app = express();
+const port = 3000;
+
+// Configuração da conexão com o banco de dados
+const pool = new Pool({
+  user: 'postgres',
+  host: '10.103.21.249',
+  database: 'techflow_db',
+  password: 'abc123',
+  port: 5432,
+});
+
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Rota de teste para verificar se a API está funcionando
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'API funcionando!' });
+});
+
+// Rota para testar a conexão com o banco de dados
+app.get('/api/db-test', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({ 
+      message: 'Conexão com o banco de dados bem-sucedida!',
+      timestamp: result.rows[0].now
+    });
+  } catch (error) {
+    console.error('Erro ao conectar ao banco de dados:', error);
+    res.status(500).json({ 
+      error: 'Erro ao conectar ao banco de dados', 
+      details: error.message 
+    });
+  }
+});
+
+// GET todos os produtos
+app.get('/api/products', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM products ORDER BY id ASC');
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error('Erro ao buscar produtos:', error);
+    res.status(500).json({ error: 'Erro no servidor', details: error.message });
+  }
+});
+
+// GET produto por ID
+app.get('/api/products/:id', async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error('Erro ao buscar produto:', error);
+    res.status(500).json({ error: 'Erro no servidor', details: error.message });
+  }
+});
+
+// CREATE um novo produto
+app.post('/api/products', async (req, res) => {
+  const { name, description, price, quantity } = req.body;
+  
+  if (!name || !price) {
+    return res.status(400).json({ error: 'Nome e preço são obrigatórios' });
+  }
+  
+  try {
+    const result = await pool.query(
+      'INSERT INTO products (name, description, price, quantity) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, description, price, quantity || 0]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Erro ao criar produto:', error);
+    res.status(500).json({ error: 'Erro no servidor', details: error.message });
+  }
+});
+
+// UPDATE um produto
+app.put('/api/products/:id', async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { name, description, price, quantity } = req.body;
+  
+  try {
+    const result = await pool.query(
+      'UPDATE products SET name = $1, description = $2, price = $3, quantity = $4 WHERE id = $5 RETURNING *',
+      [name, description, price, quantity, id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error('Erro ao atualizar produto:', error);
+    res.status(500).json({ error: 'Erro no servidor', details: error.message });
+  }
+});
+
+// DELETE um produto
+app.delete('/api/products/:id', async (req, res) => {
+  const id = parseInt(req.params.id);
+  
+  try {
+    const result = await pool.query('DELETE FROM products WHERE id = $1 RETURNING *', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    
+    res.status(200).json({ message: 'Produto excluído com sucesso' });
+  } catch (error) {
+    console.error('Erro ao excluir produto:', error);
+    res.status(500).json({ error: 'Erro no servidor', details: error.message });
+  }
+});
+
+
+// Inicia o servidor
+app.listen(port, () => {
+  console.log(`Servidor TechFlow rodando na porta ${port}`);
+  console.log(`Conectando ao banco de dados em 10.103.21.249`);
+});
